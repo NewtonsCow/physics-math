@@ -5,6 +5,7 @@
       <w>arith</w>
       <w>autocurried</w>
       <w>bufsize</w>
+      <w>centerdot</w>
       <w>checkins</w>
       <w>circleci</w>
       <w>cnst</w>
@@ -14,19 +15,29 @@
       <w>denom</w>
       <w>deriv</w>
       <w>dfrac</w>
+      <w>docdest</w>
+      <w>egthickspaceinfty</w>
       <w>entrypoints</w>
+      <w>extcolor</w>
       <w>exts</w>
+      <w>falsey</w>
       <w>fempto</w>
       <w>functionals</w>
       <w>gadd</w>
+      <w>genable</w>
+      <w>genables</w>
       <w>gmul</w>
       <w>gsub</w>
       <w>heta</w>
+      <w>infty</w>
+      <w>ints</w>
       <w>katex</w>
       <w>kerns</w>
+      <w>leftarrow</w>
       <w>mathrm</w>
       <w>memoizer</w>
       <w>moduledefinition</w>
+      <w>moduledocumentation</w>
       <w>mult</w>
       <w>multf</w>
       <w>nargs</w>
@@ -35,6 +46,7 @@
       <w>noninfringement</w>
       <w>numer</w>
       <w>numerics</w>
+      <w>observablehq</w>
       <w>operatorname</w>
       <w>pdir</w>
       <w>pfunction</w>
@@ -55,12 +67,17 @@
       <w>textcolor</w>
       <w>timestep</w>
       <w>tsbuild</w>
+      <w>tsc</w>
+      <w>typedoc</w>
+      <w>unpkg</w>
       <w>unprefixed</w>
+      <w>varadic</w>
       <w>vectorish</w>
       <w>versor</w>
       <w>viewof</w>
       <w>wasm</w>
       <w>xadd</w>
+      <w>xgcd</w>
       <w>xnegate</w>
       <w>xsub</w>
       <w>ångstrom</w>

@@ -11,8 +11,9 @@
  */
 
 
-import {defineTag, Throw} from "./utils";
+import {callSite, defineTag, Throw, ViewOf} from "./utils";
 import {DEFAULT_STYLE, StyleContext} from "./latex";
+import {TEX_FORMATTER} from "./base";
 
 /**
  * String literal parser for LaTeX literals (avoids the need for quoting backslash).
@@ -32,7 +33,8 @@ export enum Primitive {
     current = 'current', // Dunno why this is the SI base
     temperature = 'temperature',
     amount = 'amount', // Amount
-    candela = 'candela' // An SI base unit for some reason
+    candela = 'candela', // An SI base unit for some reason
+    money = 'money'
 }
 
 export const primitiveKeys: Primitive[] = Object.keys(Primitive) as Primitive[];
@@ -51,7 +53,8 @@ const ORDER: { [K in Primitive]: number } = (i => {
         current: i++,
         temperature: i++,
         time: i++,
-        candela: i++
+        candela: i++,
+        money: i++
     };
 })(0);
 /**
@@ -89,6 +92,7 @@ export interface PrimitiveUnitAttributes {
     varName: string;
     absolute?: boolean;
     si_base?: boolean;
+    names?: string[];
 
     [k: string]: any;
 }
@@ -97,7 +101,7 @@ export interface PrimitiveUnitAttributes {
  * Marker interface indicating primitive standard non-prefixed SI-compatible units.
  */
 export interface PrimitiveSI {
-
+    name?: string;
 }
 
 export interface UnitAttributes extends Partial<PrimitiveUnitAttributes> {
@@ -117,12 +121,16 @@ export interface IUnitBase<T extends PUnitTerms = PUnitTerms> {
     readonly id: string;
 
     readonly name: string;
+    readonly names: string[];
 
     readonly symbol?: string;
     readonly varName?: string;
     readonly attributes: UnitAttributes;
     readonly tex: string;
-    getTex(ctx?: StyleContext): string;
+    toTex(ctx?: StyleContext): string;
+    readonly html: Element & ViewOf<IUnitBase<T>>;
+
+    toHtml(block?: boolean, ctx?: StyleContext): Element & ViewOf<IUnitBase>;
 }
 
 /**
@@ -131,9 +139,10 @@ export interface IUnitBase<T extends PUnitTerms = PUnitTerms> {
  */
 export const makeLookupKey = (key: PUnitTerms) => {
     const units = Object.keys(Primitive) as Primitive[];
+    const invalid = (k: Primitive) => Throw(`Invalid primitive type name "${k} in type key.`);
     return units
         .sort(orderUnits)
-        .map(k => `${PRIMITIVE_MAP[k]?.symbol || Throw(`Invalid primitive type name "${k} in type key.`)}^${key[k] || 0}`)
+        .map(k => `${PRIMITIVE_MAP[k]?.symbol || invalid(k)}^${key[k] || 0}`)
         .join(' ');
 }
 
@@ -155,6 +164,8 @@ export abstract class UnitBase<T extends PUnitTerms> implements IUnitBase<T> {
     // Our cached or supplied LaTeX string.
     private tex_?: string;
 
+    readonly names: string[] = [];
+
     protected constructor(key: T, attributes: UnitAttributes) {
         this.key = key;
         this.attributes = attributes;
@@ -164,20 +175,20 @@ export abstract class UnitBase<T extends PUnitTerms> implements IUnitBase<T> {
         }
     }
 
-    getTex(ctx: StyleContext = DEFAULT_STYLE.context): string {
+    toTex(ctx: StyleContext = DEFAULT_STYLE.context): string {
         const makeTex = (key: PUnitTerms) => {
             const units = Object.keys(key) as Primitive[];
             const numUnits = units
                 .filter(k => (key[k] || 0) > 0)
                 .sort(orderUnits);
             const num = numUnits
-                .map(k => TeX`${PRIMITIVE_MAP[k].getTex(ctx)}${(key[k] || 0) > 1 ? TeX`^{${key[k]}}` : TeX``}`)
+                .map(k => TeX`${PRIMITIVE_MAP[k].toTex(ctx)}${(key[k] || 0) > 1 ? TeX`^{${key[k]}}` : TeX``}`)
                 .join(TeX`\centerdot`);
             const denomUnits = units
                 .filter(k => (key[k] || 0) < 0)
                 .sort(orderUnits);
             const denom = denomUnits
-                .map(k => TeX`${PRIMITIVE_MAP[k].getTex(ctx)}${(key[k] || 0) < -1 ? TeX`^{${-(key[k] || 0)}}` : TeX``}`)
+                .map(k => TeX`${PRIMITIVE_MAP[k].toTex(ctx)}${(key[k] || 0) < -1 ? TeX`^{${-(key[k] || 0)}}` : TeX``}`)
                 .join(TeX`\centerdot`);
             return denomUnits.length === 0
                 ? num
@@ -190,7 +201,7 @@ export abstract class UnitBase<T extends PUnitTerms> implements IUnitBase<T> {
 
     get tex(): string {
         return this.tex_ || (
-            this.tex_ = this.getTex()
+            this.tex_ = this.toTex()
         );
     }
 
@@ -199,6 +210,23 @@ export abstract class UnitBase<T extends PUnitTerms> implements IUnitBase<T> {
     }
 
     abstract readonly name: string;
+    get html(): Element & ViewOf<this> {
+        return this.toHtml();
+    }
+
+    toHtml(block?: boolean, ctx: StyleContext = DEFAULT_STYLE.context): Element & ViewOf<this> {
+        // callSite prepares it for ObservableHQ's tex string interpolator.
+        const tex = this.toTex(ctx);
+        const latex = callSite(tex);
+        const fmt = block ? TEX_FORMATTER.block : TEX_FORMATTER.inline;
+        const h = fmt(latex) as ViewOf<this> & Element;
+        h.value = this;
+        return h;
+    }
+
+    toString() {
+        return this.name;
+    }
 }
 
 /**
@@ -216,6 +244,8 @@ class PrimitiveUnit<U extends Primitive> extends UnitBase<{ [K in U]: 1 }> imple
         this.symbol = symbol;
         this.varName = varName;
         this.unit = u;
+        this.names.push(name);
+        symbol && this.names.push(symbol);
     }
 }
 
@@ -235,6 +265,7 @@ export const PRIMITIVE_MAP: Readonly<PrimitiveMap> = (() => {
                           attributes: UnitAttributes = {}) => {
         const primitive = new PrimitiveUnit(u, name, symbol, varName, attributes);
         (val as any)[u] = primitive;
+        primitive.names.push(u);
         return primitive;
     }
     defPrimitive(Primitive.time, 'second', 's', 't', {si_base: true});
@@ -248,7 +279,8 @@ export const PRIMITIVE_MAP: Readonly<PrimitiveMap> = (() => {
     defPrimitive(Primitive.current, 'ampere', 'A', 'A', {si_base: true});
     defPrimitive(Primitive.temperature, 'kelvin', 'K', 'T',
         {absolute: true, si_base: true});
-    defPrimitive(Primitive.candela, 'candela', 'cd', 'c', {si_base: true})
+    defPrimitive(Primitive.candela, 'candela', 'cd', 'c', {si_base: true});
+    defPrimitive(Primitive.money,'money', '$', '$', {});
     return val as PrimitiveMap;
 })();
 /**
@@ -282,6 +314,7 @@ export namespace P {
     export type temperature = typeof temperature;
     export const candela: IUnitBase<{ candela: 1 }> = PRIMITIVE_MAP.candela;
     export type candela = typeof candela;
+    export const money: IUnitBase<{money: 1}> = PRIMITIVE_MAP.money;
 }
 
 defineTag(PrimitiveUnit, 'PrimitiveUnit');

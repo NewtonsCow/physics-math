@@ -88,7 +88,9 @@ type OrZero<A> = A extends number ? A : 0;
  * Multiply two [[UnitTerms]] (by adding the exponents.)
  * @module Physical Units
  */
-export type MultiplyTerms<A extends PUnitTerms, B extends PUnitTerms> = { [K in keyof typeof Primitive]: Add<OrZero<A[K]>, OrZero<B[K]>> };
+export type MultiplyTerms<A extends PUnitTerms, B extends PUnitTerms> =
+    { [K in keyof typeof Primitive]: Add<OrZero<A[K]>, OrZero<B[K]>> };
+
 // noinspection JSUnusedGlobalSymbols
 /**
  * Invert a [[UnitTerms]] (by negating the exponents).
@@ -158,7 +160,8 @@ const nullTerms: CompleteTerms<{}> = {
     current: 0,
     temperature: 0,
     amount: 0,
-    candela: 0
+    candela: 0,
+    money: 0
 };
 /**
  * @param key
@@ -221,6 +224,8 @@ export interface Unit<T extends UnitTerms = UnitTerms> extends IUnitBase<T> {
      * @param unit
      */
     fromSI(v: number, unit: Unit): [number, this];
+
+    readonly names: string[];
 }
 
 /**
@@ -360,6 +365,9 @@ export const defineUnit =
                 } else {
                     table[n] = u;
                 }
+                if (!u.names.some(un => un === n)) {
+                    u.names.push(n);
+                }
             }
             return u;
         };
@@ -372,6 +380,7 @@ export const defineUnit =
         const addNames = (u: Unit) => {
             const an = addName(u);
             names.forEach(n => an(n.toLowerCase()));
+            attributes.names?.forEach(n => an(n.toLowerCase()));
             addSpecials(u);
         };
         const existing = UNITS[lookupKey];
@@ -416,6 +425,8 @@ export class AliasUnit<T extends UnitTerms> extends UnitBase<T> implements Alias
         this.si = si.si;
         this.scale = scale;
         this.offset = offset;
+        this.names.push(name);
+        symbol && this.names.push(symbol);
     }
 
     toSI<R extends number>(v: R): [R, Unit] {
@@ -474,8 +485,11 @@ export const defineAlias =
         const addName = (n: string, table = ALIASES) => {
             const lc = n.toLowerCase();
             const conflict = ALIASES[lc] || NAMED_UNITS[lc] || SYMBOL_ALIASES[n] || SYMBOL_UNITS[n];
-            conflict
-                ? Throw(`Name conflict for alias ${n} with unit ${conflict.name}`)
+            alias.names.push(n);
+            conflict ?
+                conflict !== alias
+                    ? Throw(`Name conflict for alias ${n} with unit ${conflict.name}`)
+                    :null
                 : (table[n] = alias);
         };
         addName(name.toLowerCase());
@@ -562,6 +576,10 @@ const parsePrefix = (u: string, siOnly: boolean = false): Unit | null => {
         if (base && !base.attributes.prefixed) {
             const sym = (prefix.symbol && base.symbol) ? `${prefix.symbol}${base.symbol}` : undefined;
             const aName = `${prefix.name}${base.name}`;
+            if ((prefix.symbol === name[1] && base.name === name[2])
+                || (prefix.name === name[1] && base.symbol === name[2])) {
+                throw new Error(`Don't mix abbreviations and full names. E.g. ${aName}, not ${u}}`);
+            }
             return ALIASES[aName] || defineAlias(aName, sym, {
                 prefixed: true
             }, base, Math.pow(10, prefix.exponent));
@@ -651,6 +669,8 @@ export namespace TEST {
     // noinspection JSUnusedGlobalSymbols
     export const parsePrefix_ = parsePrefix;
 }
+
+export const isUnit = (u: any): u is Unit => u instanceof DerivedUnit || u instanceof AliasUnit;
 
 defineTag(DerivedUnit, 'Unit');
 defineTag(AliasUnit, 'Unit');

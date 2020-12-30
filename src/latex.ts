@@ -11,9 +11,11 @@
  */
 
 import R from "ramda";
-import {defineTag, gcd, tex} from "./utils";
+import {defineTag, tex, Throw} from "./utils";
+import {gcd} from './algebra';
 import {Unit} from "./units";
 import {IUnitBase} from "./primitive-units";
+import {IPFunction, Variable} from "./base";
 
 
 /**
@@ -27,36 +29,36 @@ export type Styler<I = string|number, R extends any[] = any[]> = (continuation: 
 type StylerFn<I = string|number, R extends any[] = any[]> = (ctx: StyleContext, arg: I, ...rest: R) => string;
 
 
-type StyleKeyString = 'function' | 'call' | 'variable';
-type StyleKeyNumber = 'number';
-type StyleKeyOther =  'applyUnits' | 'applyUnitFunction' | 'unit' | 'unitSymbol' | 'unitFraction';
-type StyleKeyData = 'numberSpecials' | 'numberPrecision' | 'numberFormat' | 'numberTrimTrailingZero';
+type StyleKeyStyler =  'applyUnit' | 'applyUnitFunction' | 'function' | 'variable' | 'unit' | 'unitSymbol' | 'unitFraction' | 'number' |
+    'call';
+type StyleKeyData = 'exponentStyle' | 'numberSpecials' | 'numberPrecision' | 'numberFormat' | 'numberTrimTrailingZero';
 
 /**
  * The valid style keys to be used with [[setStyle]].
  */
-export type StyleKey = StyleKeyString | StyleKeyNumber | StyleKeyOther | StyleKeyData;
+export type StyleKey = StyleKeyStyler | StyleKeyData;
 
 export enum NumberFormat {
-    normal,
-    scientific,
-    engineering
+    normal = 'normal',
+    scientific = 'scientific',
+    engineering = 'engineering'
 }
 
 /**
  * A type map of [[StyleKey]] to [[Styler]] (plus the supporting data items).
  */
 export type StyleMap = {
-    [k in 'unit'|'unitSymbol']: Styler<IUnitBase>;
-} & {
-    [k in 'unitFraction']: Styler<string,[string]>
-} & {
-    [k in 'applyUnit'|'applyUnitFunction']: Styler<string|number, [IUnitBase]>;
-} & {
-    [k in StyleKeyString]: Styler<string>;
-} & {
-    [j in StyleKeyNumber]: Styler<number>
-} & {
+    unit: Styler<IUnitBase>;
+    unitSymbol: Styler<IUnitBase>;
+    unitFraction: Styler<string, [string]>
+    applyUnit: Styler<string|number, [IUnitBase]>;
+    applyUnitFunction: Styler<string|number, [IUnitBase]>;
+    number: Styler<number>;
+    variable: Styler<Variable>;
+    function: Styler<IPFunction>;
+    call: Styler<IPFunction, [Variable[]]>
+
+    exponentStyle: Style| 'self' | 'exponent';
     numberSpecials: Map<number,string>;
     numberPrecision: number;
     numberFormat: NumberFormat;
@@ -64,19 +66,11 @@ export type StyleMap = {
 };
 
 type StyleFnFor<K extends keyof StyleMap> =
-    K extends 'applyUnit'|'applyUnitFunction'
-        ? StylerFn<string|number, [IUnitBase]>
-        : K extends 'unit'|'unitSymbol'
-        ? StylerFn<IUnitBase>
-        : K extends 'unitFraction'
-            ? StylerFn<string, [string]>
-            : K extends StyleKeyString|StyleKeyNumber
-                ? StyleMap[K] extends Styler<infer S>
-                    ? StylerFn<S>
-                    : never
-                : K extends StyleKey
-                    ? StyleMap[K]
-                    : never;
+    K extends StyleKey
+        ? StyleMap[K] extends Styler<infer S, infer A>
+        ? StylerFn<S, A>
+        : StyleMap[K] // Non-Styler entry, use same type.
+        : never;
 
 type StyleFnMap = {
     [k in keyof StyleMap]: StyleFnFor<k>;
@@ -85,12 +79,16 @@ type StyleFnMap = {
 /**
  * A source of [[StyleContext]] instances. Initially, you obtain a [[StyleContext]] from a [[Style]].
  */
-export interface StyleContextHolder {
+export interface StyleContextHolder<T extends StyleContextHolder<T>> {
     readonly context: StyleContext;
+
+    set(params: StyleMap): T;
+
+    wrap(params: StyleMap): T;
 }
 
 
-export class StyleContext implements StyleContextHolder {
+export class StyleContext implements StyleContextHolder<StyleContext> {
     readonly style: Style;
     readonly parent?: StyleContext;
     constructor(style: Style, parent?: StyleContext, options: any = {}) {
@@ -101,11 +99,12 @@ export class StyleContext implements StyleContextHolder {
         Object.assign(this, options);
     }
 
-    function(f: string) {
+    function(f: IPFunction) {
         return this.style.function(this, f);
     }
-    call(f: string) {
-        return this.style.call(this, f);
+
+    call(f: IPFunction, vars: Variable[] = []) {
+        return this.style.call(this, f, vars);
     }
     variable(v: string) {
         return this.style.variable(this, v);
@@ -133,12 +132,22 @@ export class StyleContext implements StyleContextHolder {
     get numberPrecision() { return this.style.numberPrecision; }
     get numberFormat() { return this.style.numberFormat; }
     get numberTrimTrailingZero() { return this.style.numberTrimTrailingZero; }
+    get exponentStyle() { return this.style.exponentStyle.context; }
 
     get context() {
         // For now we deal with a single context, but might have nested contexts in the future.
         return this;
     }
+
+    set(params: StyleMap): StyleContext {
+        return this.style.set(params).context;
+    }
+
+    wrap(params: StyleMap): StyleContext {
+        return this.style.wrap(params).context;
+    }
 }
+
 
 defineTag(StyleContext, 'StyleContext');
 
@@ -151,9 +160,9 @@ defineTag(StyleContext, 'StyleContext');
  * The [[Style.set]], [[Style.wrap]], and [[Style.wrapWith]] methods can be chained
  * to provide any combination.
  */
-export class Style implements Readonly<StyleFnMap>, StyleContextHolder {
-    readonly call: StylerFn<string>;
-    readonly function: StylerFn<string>;
+export class Style implements Readonly<StyleFnMap>, StyleContextHolder<Style> {
+    readonly call: StylerFn<IPFunction, [Variable[]]>;
+    readonly function: StylerFn<IPFunction>;
     readonly variable: StylerFn<string>;
     readonly number: StylerFn<number>;
     readonly unit: StylerFn<IUnitBase>;
@@ -165,6 +174,8 @@ export class Style implements Readonly<StyleFnMap>, StyleContextHolder {
     readonly numberPrecision: number;
     readonly numberSpecials: Map<number, string>;
     readonly numberTrimTrailingZero: boolean;
+
+    readonly exponentStyle: Style;
 
     constructor(init: StyleMap) {
         // The chain bottoms out at the defaults if they pass it off to their continuations.
@@ -181,6 +192,11 @@ export class Style implements Readonly<StyleFnMap>, StyleContextHolder {
         this.numberPrecision = init.numberPrecision;
         this.numberSpecials = init.numberSpecials;
         this.numberTrimTrailingZero = init.numberTrimTrailingZero;
+        this.exponentStyle = init.exponentStyle == 'self'
+            ? this
+            : init.exponentStyle === 'exponent'
+                ? exponentStyle
+                : init.exponentStyle;
     }
 
     /**
@@ -188,7 +204,19 @@ export class Style implements Readonly<StyleFnMap>, StyleContextHolder {
      * the one in this one.
      */
     set(stylers: Partial<StyleMap>): Style {
-        return Object.freeze(Object.assign(Object.create(this), stylers));
+        const nStyle = Object.create(this);
+        for (const k of Object.keys(stylers)) {
+            const v = (stylers as any)[k];
+            if (nStyle[k] === undefined) {
+                throw new Error(`Invalid style key: ${k}`);
+            }
+            if (typeof v === 'function') {
+                nStyle[k] = v((DEFAULT_STYLE_FNS as any)[k] as StylerFn, this);
+            } else {
+                nStyle[k] = v;
+            }
+        }
+        return Object.freeze(nStyle);
     }
 
     /**
@@ -205,12 +233,16 @@ export class Style implements Readonly<StyleFnMap>, StyleContextHolder {
             return Object.freeze(result);
         }
         const merge: (n: Partial<StyleMap>, o: Style) => StyleMap =
-            R.mergeWithKey((key: string, a: Styler|Map<any,any>, b: StylerFn|Map<any,any>) =>
-                (key === 'numberFormat' || key === 'numberPrecision')
+            R.mergeWithKey((key: string, a: Styler|Map<any,any>, b: StylerFn|Map<any,any>) => {
+                if ((this as any)[key] === undefined) {
+                    throw new Error(`Invalid style key: ${key}`);
+                }
+                return (key === 'numberFormat' || key === 'numberPrecision')
                     ? a
                     : (key === 'numberSpecials')
-                    ? mergeSpecials(a as Map<number,string>, b as Map<number,string>)
-                    : (<Styler>a)(<StylerFn>b, this));
+                    ? mergeSpecials(a as Map<number, string>, b as Map<number, string>)
+                    : (<Styler>a)(<StylerFn>b, this);
+            });
         return Object.freeze(new Style(merge(stylers, this)));
     }
 
@@ -288,12 +320,15 @@ const formatNumber: Styler<number> = (continuation: StylerFn<number>, _style: St
         }
         switch (ctx.numberFormat) {
             case NumberFormat.normal:
-                return n.toString(ctx.numberPrecision);
+                const digits = Math.ceil(Math.log10(n));
+                return n.toFixed(Math.max(ctx.numberPrecision - digits, 0));
             case NumberFormat.scientific:
             case NumberFormat.engineering:
-                const exp = Math.log10(n);
+                const exp = Math.log10(Math.abs(n));
                 const eng = ctx.numberFormat === NumberFormat.engineering ? 3 : 1;
-                const trunc = exp < 0 ? Math.ceil(exp / eng) * eng : Math.floor(exp / eng) * eng;
+                const trunc = exp < 0
+                    ? -Math.floor(-(exp - 0.5)/ eng) * eng
+                    : Math.floor(exp / eng) * eng;
                 const trim = (n: string) =>
                     ctx.numberTrimTrailingZero && n.match(/\./)
                         ? n.replace(/\.?0+$/, '')
@@ -302,7 +337,10 @@ const formatNumber: Styler<number> = (continuation: StylerFn<number>, _style: St
                     return trim(n.toPrecision(ctx.numberPrecision))
                 }
                 const mantissa = n / Math.pow(10, trunc);
-                return tex`${trim(mantissa.toPrecision(ctx.numberPrecision))} x 10^{${trunc}}`;
+                if (trunc == 0) {
+                    return tex`${trim(mantissa.toPrecision(ctx.numberPrecision))}`;
+                }
+                return tex`${trim(mantissa.toPrecision(ctx.numberPrecision))} \operatorname{x} 10^{${trunc}}`;
         }
     };
 
@@ -326,41 +364,62 @@ export const colorStyler = (color: RGB6Color): Styler<any> =>
         tex`\textcolor{${color}}{${continuation(ctx, texString, ...rest)}}`;
 
 
+const DEFAULT_STYLE_FNS: StyleFnMap = {
+    unit: (_ctx, u): string => u.toTex(_ctx),
+    unitFraction: (_ctx, numer, denom) => tex`\Large{\frac{${numer}}{${denom}}}`,
+    unitSymbol: (_ctx, unit) => tex`\text{${unit.symbol}}`,
+    function: (_ctx, op) => tex`\operatorname{${op.name || op}}`,
+    call: (ctx, s, vars: Variable[]) => `${ctx.function(s)}(${vars.map(v => ctx.variable(v)).join(',')})`,
+    variable: (_ctx, s: string) => tex`{${s}}`,
+    applyUnit: (ctx, v: string|number, u: IUnitBase) => tex`{{${v}}\ {${ctx.unit(u)}}}`,
+    applyUnitFunction: (ctx, v: string|number, u: IUnitBase) => tex`{{${v}} \Leftarrow {${ctx.unit(u)}}}`,
+    number: (_ctx, s) => s.toString(),
+    numberFormat: NumberFormat.scientific,
+    numberPrecision: 4,
+    numberSpecials: SPECIAL_NUMBERS,
+    numberTrimTrailingZero: true,
+    exponentStyle: 'exponent'
+};
+
+const exponentError = () => () => Throw(`Units should not appear in the exponent.`);
+const exponentStyle: Style = Object.freeze(new Style({
+    unit: exponentError,
+    unitFraction: exponentError,
+    unitSymbol: exponentError,
+    function: () => DEFAULT_STYLE_FNS.function,
+    call: () => DEFAULT_STYLE_FNS.call,
+    variable: () => DEFAULT_STYLE_FNS.variable,
+    applyUnit: exponentError,
+    applyUnitFunction: exponentError,
+    number: chain(specialNumber, formatNumber),
+    numberFormat: NumberFormat.normal,
+    numberPrecision: 0,
+    numberSpecials: SPECIAL_NUMBERS,
+    numberTrimTrailingZero: true,
+    exponentStyle: 'self'
+}));
+
 /**
  * The stylers. These handle adding style formatting to the syntactic expressions
  * components.
  */
 export const DEFAULTS: StyleMap = Object.freeze({
     unit: colorStyler('ff0000'),
-    unitFraction: () => (_ctx, numer, denom) => tex`\Large{\frac{${numer}}{${denom}}}`,
-    unitSymbol: () => (_ctx, unit) => tex`\text{${unit.symbol}}`,
-    function: () => (_ctx, op) => tex`\operatorname{${op}}`,
-    call: () => (_ctx, s) => s,
-    variable: () => (_ctx, s: string) => tex`{${s}}`,
-    applyUnit: () => (ctx, v: string|number, u: IUnitBase) => tex`{{${v}}\ {${ctx.unit(u)}}}`,
-    applyUnitFunction: () => (ctx, v: string|number, u: IUnitBase) => tex`{{${v}} \Rightarrow {${ctx.unit(u)}}}`,
+    unitFraction: () => DEFAULT_STYLE_FNS.unitFraction,
+    unitSymbol: () => DEFAULT_STYLE_FNS.unitSymbol,
+    function: () => DEFAULT_STYLE_FNS.function,
+    call: () => DEFAULT_STYLE_FNS.call,
+    variable: () => DEFAULT_STYLE_FNS.variable,
+    applyUnit: () => DEFAULT_STYLE_FNS.applyUnit,
+    applyUnitFunction: () => DEFAULT_STYLE_FNS.applyUnitFunction,
     number: chain(specialNumber, formatNumber),
     numberFormat: NumberFormat.scientific,
     numberPrecision: 4,
     numberSpecials: SPECIAL_NUMBERS,
-    numberTrimTrailingZero: true
+    numberTrimTrailingZero: true,
+    exponentStyle: exponentStyle
 });
 
-const DEFAULT_STYLE_FNS: StyleFnMap = {
-    unit: (_ctx, u): string => u.getTex(_ctx),
-    unitFraction: (_ctx, numer, denom) => tex`\dfrac{${numer}}{${denom}}`,
-    unitSymbol: (_ctx, unit) => tex`\text{${unit.symbol}}`,
-    function: (_ctx, s) => s.toString(),
-    call: (_ctx, s) => s.toString(),
-    variable: (_ctx, s) => s.toString(),
-    applyUnit: (ctx, s, u) => `${s}\ ${ctx.unit(u)}`,
-    applyUnitFunction: (ctx, s, u) => `${s} \RightArrow ${ctx.unit(u)}`,
-    number: (_ctx, s) => s.toString(),
-    numberFormat: NumberFormat.scientific,
-    numberPrecision: 4,
-    numberSpecials: SPECIAL_NUMBERS,
-    numberTrimTrailingZero: true
-};
 
 /**
  * The initial [[DEFAULT_STYLE]].
@@ -371,8 +430,24 @@ export const INITIAL_STYLE = new Style(DEFAULTS);
 /**
  * The [[Style]] that items are formatted with by default. May be changed; the
  * initial value is in [[INITIAL_STYLE]].
+ *
+ * @internal
  */
 export let DEFAULT_STYLE = INITIAL_STYLE;
+
+/**
+ * Set the default style to be used.
+ * @param style
+ */
+export const setStyle = (style: Style): Style => {
+    // noinspection SuspiciousTypeOfGuard
+    if (!(style instanceof Style)) {
+        throw new Error(`Not a style object: ${style}`);
+    }
+    const old = DEFAULT_STYLE;
+    DEFAULT_STYLE = style;
+    return old;
+}
 
 // noinspection JSUnusedGlobalSymbols
 /**

@@ -20,37 +20,34 @@ import {defineAlias, defineUnit} from "./units";
  * This is a better alternative to prefixing all the names with U_.
  */
 export namespace Units {
-    const cu = <T extends PUnitTerms>(p: IUnitBase<T>) => defineUnit(p.key, {name: p.name, ...p.attributes});
+    const cu = <T extends PUnitTerms>(p: IUnitBase<T>) =>
+        defineUnit(p.key, {
+            name: p.name,
+            ...p.attributes,
+            names: [p.name, ...p.names || []]
+        });
     export const mass = cu(P.mass);
-    // noinspection JSUnusedGlobalSymbols
     export type mass = typeof mass;
     export const length = cu(P.length);
     export type length = typeof length;
     export const time = cu(P.time);
     export type time = typeof time;
-    // noinspection JSUnusedGlobalSymbols
     export const angle = cu(P.angle);
     export type angle = typeof angle;
-    // noinspection JSUnusedGlobalSymbols
     export const solidAngle = cu(P.solidAngle);
-    // noinspection JSUnusedGlobalSymbols
     export type solidAngle = typeof solidAngle;
-    // noinspection JSUnusedGlobalSymbols
     export const amount = cu(P.amount);
-    // noinspection JSUnusedGlobalSymbols
     export type amount = typeof amount;
-    // noinspection JSUnusedGlobalSymbols
     export const cycles = cu(P.cycles);
-    // noinspection JSUnusedGlobalSymbols
     export type cycles = typeof cycles;
     export const current = cu(P.current);
     export type current = typeof current;
-    // noinspection JSUnusedGlobalSymbols
     export const temperature = cu(P.temperature);
-    // noinspection JSUnusedGlobalSymbols
     export type temperature = typeof temperature;
     export const candela = cu(P.candela);
     export type candela = typeof candela;
+    export const money = cu(P.money);
+    export type money = typeof money;
 
     export const unity = defineUnit({},
         {name: '1', symbol: '', si_base: true},
@@ -62,7 +59,6 @@ export namespace Units {
         'velocity');
     export type velocity = typeof velocity;
 
-    // noinspection JSUnusedGlobalSymbols
     export const angularVelocity = defineUnit({angle: 1, time: -1},
         {varName: 'ω'},
         'angularVelocity');
@@ -78,7 +74,6 @@ export namespace Units {
         'force');
     export type force = typeof force;
 
-    // noinspection JSUnusedGlobalSymbols
     export const torque = defineUnit({mass: 1, length: 2, time: -2},
         {},
         'torque');
@@ -99,25 +94,21 @@ export namespace Units {
         'area');
     export type area = typeof area;
 
-    // noinspection JSUnusedGlobalSymbols
     export const volume = defineUnit({length: 3},
         {varName: 'V'},
         'volume');
     export type volume = typeof volume;
 
-    // noinspection JSUnusedGlobalSymbols
     export const density = defineUnit({mass: 1, length: -3},
         {},
         'density');
     export type density = typeof density;
 
-    // noinspection JSUnusedGlobalSymbols
     export const frequency = defineUnit({cycles: 1, time: -1},
         {name: 'hertz', symbol: 'Hz', varName: 'f'},
         'frequency');
     export type frequency = typeof frequency;
 
-    // noinspection JSUnusedGlobalSymbols
     export const wavelength = defineUnit({length: 1, cycles: -1},
         {},
         'wavelength');
@@ -133,7 +124,6 @@ export namespace Units {
         'charge');
     export type charge = typeof charge;
 
-    // noinspection JSUnusedGlobalSymbols
     export const capacitance = defineUnit({length: -2, mass: -1, time: 4, current: 2},
         {name: 'farad', symbol: 'F'},
         'capacitance');
@@ -144,31 +134,26 @@ export namespace Units {
         'voltage', 'EMF');
     export type voltage = typeof voltage;
 
-    // noinspection JSUnusedGlobalSymbols
     export const resistance = defineUnit({length: 2, mass: 1, time: -3, current: -1},
         {name: 'ohm', symbol: 'Ω', varName: 'R'},
         'resistance');
     export type resistance = typeof resistance;
 
-    // noinspection JSUnusedGlobalSymbols
     export const conductance = defineUnit({length: -2, mass: -1, time: 3, current: 1},
         {name: 'siemen', symbol: 'S'},
         'conductance');
     export type conductance = typeof conductance;
 
-    // noinspection JSUnusedGlobalSymbols
     export const flux = defineUnit({length: 2, mass: 1, time: -2, current: -1},
         {name: 'weber', symbol: 'Wb'},
         'flux');
     export type flux = typeof flux;
 
-    // noinspection JSUnusedGlobalSymbols
     export const fluxDensity = defineUnit({mass: 1, time: -2, current: -1},
         {name: 'tesla', symbol: 'T'},
         'fluxDensity');
     export type fluxDensity = typeof fluxDensity;
 
-    // noinspection JSUnusedGlobalSymbols
     export const inductance = defineUnit({length: 2, mass: 1, time: -2, current: -2},
         {name: 'henry', symbol: 'H'},
         'inductance');
@@ -222,6 +207,10 @@ export namespace Units {
         Units.mass, 1000);
 
     // noinspection JSUnusedGlobalSymbols
+    export const tonUS = defineAlias('ton (US)', 'Ton (US)', {},
+        Units.mass, 987.186);
+
+    // noinspection JSUnusedGlobalSymbols
     export const inch = defineAlias('inch', 'in', {},
         Units.length, 0.0254);
 
@@ -238,6 +227,14 @@ export namespace Units {
         Units.length, 1609.344);
 
     // noinspection JSUnusedGlobalSymbols
+    export const nautical_mile = defineAlias('nautical mile', 'NM', {},
+        Units.length, 1852);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const knot = defineAlias('knot', 'kt', {},
+        Units.velocity, 1852 / 3600);
+
+    // noinspection JSUnusedGlobalSymbols
     export const angstrom = defineAlias('angstrom', 'Å', {},
         Units.length, 0.0000000001, 0,
         'ångstrom');
@@ -245,4 +242,60 @@ export namespace Units {
     // noinspection JSUnusedGlobalSymbols
     export const gram = defineAlias('gram', 'g', {},
         Units.mass, 0.001);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const barrel = defineAlias('barrel', 'bbl', {},
+        Units.volume, 158.98729492);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const gallon = defineAlias('gallon', 'gal', {},
+        Units.volume, 3.785411784);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const quart = defineAlias('quart', 'qt', {},
+        Units.volume, 3.785411784 / 4);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const pint = defineAlias('pint', 'pt', {},
+        Units.volume, 3.785411784 / 8);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const cup = defineAlias('cup', 'cp', {},
+        Units.volume, 3.785411784 / 16);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const tablespoon = defineAlias('tablespoon', 'Tbl', {},
+        Units.volume, 0.0147868);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const teaspoon = defineAlias('teaspoon', 'tsp', {},
+        Units.volume, 0.0147868/3);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const btu = defineAlias('british thermal unit', 'but', {},
+        Units.energy, 1055.06);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const ounce = defineAlias('ounce', 'oz', {},
+        Units.force, 0.278);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const pound = defineAlias('pound', 'lb', {},
+        Units.force, 0.278 * 16);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const stone = defineAlias('stone', 'stone', {},
+        Units.force, 201.168);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const furlong = defineAlias('furlong', 'furlong', {},
+        Units.length, 201.168);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const fortnight = defineAlias('fortnight', 'fortnight', {},
+        Units.time, 14*24*60*60);
+
+    // noinspection JSUnusedGlobalSymbols
+    export const smoot = defineAlias('smoot', 'smoot', {},
+        Units.length, 1.7018);
 }

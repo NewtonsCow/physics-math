@@ -13,7 +13,7 @@
 import {ScalarConstant} from "./scalar";
 import {PCalculus} from "./pfunction";
 import {TYPE} from "./math-types";
-import {IPCalculus, IPCompileResult, IPFunctionCalculus} from "./base";
+import {IPCalculus, IPCompileResult, IPFunctionCalculus, Variable} from "./base";
 import {AnalyticIntegral} from "./integral";
 import {Units} from './unit-defs';
 import {Unit, Divide, Multiply} from "./units";
@@ -56,9 +56,9 @@ export class Poly<
     integrate(): AnalyticIntegral<number, I, U, Multiply<I, Units.time>> {
         const iu = this.unit.multiply(Units.time) as I;
         const p = new Poly(iu, 0, ...this.coefficients
-            .map((v, i) => v / (i + 1))) as IPFunctionCalculus<number, I, 1, U>;
-        const base = this as IPFunctionCalculus<number, U, 1, D, I>;
-        return new AnalyticIntegral(base, p, iu);
+            .map((v, i) => v / (i + 1))) as unknown as IPFunctionCalculus<number, I, 1, U>;
+        const base = this as unknown as IPFunctionCalculus<number, U, 1, D, I>;
+        return new AnalyticIntegral<number, I, U, Multiply<I, Units.time>>(base, p, iu);
     }
 
     integral(): AnalyticIntegral<number, I, U, Multiply<I, Units.time>> {
@@ -73,7 +73,7 @@ export class Poly<
         return makePoly(...this.coefficients);
     }
 
-    toTex(varName: string = 't', ctx: StyleContext = DEFAULT_STYLE.context): string {
+    toTex(varName: Variable = 't', ctx: StyleContext = DEFAULT_STYLE.context): string {
         return this.coefficients
             .map((v, i) =>
                 v === 0
@@ -85,15 +85,15 @@ export class Poly<
                             ? ctx.variable(varName)
                             : tex`{${ctx.number(v)} ${ctx.variable(varName)}}`
                         : v === 1
-                            ? tex`${ctx.variable(varName)}^{${ctx.number(i)}}`
-                            : `{${ctx.number(v)} ${ctx.variable(varName)}^{${ctx.number(i)}}}`
+                            ? tex`${ctx.variable(varName)}^{${ctx.exponentStyle.number(i)}}`
+                            : `{${ctx.number(v)} ${ctx.variable(varName)}^{${ctx.exponentStyle.number(i)}}}`
             )
             .filter( s => s !== '')
             .join(' + ')
             || '0';
     }
 
-    toTexWithUnits(varName: string = 't', ctx: StyleContext = DEFAULT_STYLE.context): string {
+    toTexWithUnits(varName: Variable = 't', ctx: StyleContext= DEFAULT_STYLE.context): string {
         const val = this.toTex(varName, ctx)
         const nz = this.coefficients.filter(k => k !== 0).length;
         return nz > 1
@@ -101,6 +101,37 @@ export class Poly<
             : this.coefficients[0] === 0
                 ? ctx.applyUnit(val, this.unit)
             : ctx.applyUnitFunction(val, this.unit);
+    }
+
+    equiv<T>(f: T): null| this | T {
+        // @ts-ignore
+        if (this === f) return this;
+        if (f instanceof ScalarConstant) {
+            if (this.coefficients.length === 1) {
+                if (this.coefficients[0] === f.value) return f;
+            }
+            return null;
+        } else if (f instanceof Poly) {
+            if (!super.equiv(f)) return null;
+            if (this.coefficients.length !== f.coefficients.length) return null;
+            for (let i = 0; i < f.coefficients.length; i++) {
+                if (this.coefficients[i] !== f.coefficients[i]) return null;
+            }
+            return this;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the equivalent value for [[Poly]] instances of degree 0 or 1, null otherwise.
+     */
+    asConstantValue(): number | null {
+        switch (this.coefficients.length) {
+            case 0: return 0;
+            case 1: return this.coefficients[0];
+            default:
+                return null;
+        }
     }
 }
 
@@ -113,5 +144,7 @@ const makePoly = (...coeffs: number[]) => (t: number) => {
     }
     return acc;
 };
+
+export const poly = (unit: Unit, ...coefficients: number[]) => new Poly(unit, ...coefficients);
 
 defineTag(Poly, 'Poly');

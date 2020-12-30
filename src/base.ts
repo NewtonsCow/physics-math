@@ -15,9 +15,8 @@
  */
 
 import {IUnitBase} from "./primitive-units";
-import {BaseValue, BaseValueInFrame, BaseValueRelative, Orientation, Point, Rotation, TYPE, Vector} from "./math-types";
-import {PFunction} from "./pfunction";
-import {defineTag, Throw, ViewOf} from "./utils";
+import {BaseValue, BaseValueRelative, Orientation, Point, Rotation, TYPE, Vector} from "./math-types";
+import {Throw, ViewOf} from "./utils";
 import {Divide, Multiply, Unit} from "./units";
 import {Units} from './unit-defs';
 import {StyleContext} from "./latex";
@@ -51,51 +50,38 @@ export let TEX_FORMATTER: TexDrivers = {
 export const setFormatter = (inline: TexFormatter, block: TexFormatter = (inline as any).block || inline) =>
     TEX_FORMATTER = {inline, block};
 
-export interface Value<T extends BaseValue = BaseValue, U extends IUnitBase = IUnitBase> {
+export interface Value<T extends BaseValue = BaseValue, U extends IUnitBase = IUnitBase> extends IPDisplay {
     value: T;
     readonly unit: U;
-}
-
-export interface ValueInFrame<T extends BaseValue = BaseValue, U extends IUnitBase = IUnitBase> extends Value<T, U> {
-    readonly frame: InertialFrame;
 }
 
 /**
- * @internal
+ * Marker interface for types which represent relative info, such as vectors or rotations
  */
-export abstract class ExplicitValueBase<T extends BaseValue = BaseValue, U extends IUnitBase = IUnitBase> implements Value<T, U> {
-    value: T;
-    readonly unit: U;
-    protected constructor(value: T, unit: U) {
-        this.value = value;
-        this.unit = unit;
-    }
-}
+export interface Relative {}
 
-defineTag(ExplicitValueBase.prototype, 'Value');
-
-// noinspection JSUnusedGlobalSymbols
-export class ExplicitValue<T extends BaseValueRelative = BaseValueRelative, U extends IUnitBase = IUnitBase> extends ExplicitValueBase<T, U> {
-    constructor(value: T, unit: U) {
-        super(value, unit);
-    }
-}
-
-// noinspection JSUnusedGlobalSymbols
-export class ExplicitValueInFrame<T extends BaseValueInFrame = BaseValueInFrame, U extends IUnitBase = IUnitBase>
-    extends ExplicitValueBase<T, U>
-    implements ValueInFrame<T, U> {
+/**
+ * Marker interface for types which represent info intrinsic to a particular object,
+ * such as position in space (point) or orientation
+ */
+export interface InFrame {
     readonly frame: InertialFrame;
-    constructor(value: T, unit: U, frame: InertialFrame) {
-        super(value, unit);
-        this.frame = frame;
-    }
+}
+
+export interface ValueInFrame<
+    T extends BaseValue = BaseValue,
+    U extends IUnitBase = IUnitBase
+    >
+    extends
+        Value<T, U>,
+        InFrame
+{
 }
 
 /**
  * @Category Value type
  */
-export type Velocity = Value<Vector,Units.velocity>;
+export type Velocity = Value<Vector<Units.velocity>,Units.velocity>;
 
 /**
  * @Category Value type
@@ -169,17 +155,17 @@ interface IPCompileResult6<T extends BaseValue> extends Function {
 /**
  * Convenience methods added to compiled functions.
  */
-export interface IPCompiledDisplay {
+export interface IPDisplay {
     tex: string;
 
-    toTex(varName: string): string;
+    toTex(varName?: Variable, ctx?: StyleContext): string;
 
     /**
      * Computes an HTML representation for this element.
      */
     html: Element;
 
-    toHtml(varName: string, block: boolean): Element;
+    toHtml(varName: Variable, block: boolean): Element & ViewOf<this>;
 }
 
 /**
@@ -224,7 +210,7 @@ export type IPCompiled<
     N extends ArgCount = 1,
     P extends IPFunction<R, U, N> = IPFunction<R, U, N>
     > = (
-        IPCompileResult<R, N> & IPFunctionPtr<P> & IPCompiledDisplay
+        IPCompileResult<R, N> & IPFunctionPtr<P> & IPDisplay
     );
 
 export interface PFunctionOpts<U extends Unit, N extends ArgCount = 1> {
@@ -252,13 +238,15 @@ export const PFunctionDefaults: [
     {vars: ['t4', 't3', 't2', 't1', 't0', 't'], nargs: 6}
 ];
 
-export interface IPFunctionBase<R extends BaseValue = BaseValue, U extends Unit = Unit, N extends ArgCount = 1> {
-    timestep: number;
+export interface AnyIPFunction {}
+
+export interface IPFunctionBase<R extends BaseValue = BaseValue, U extends Unit = Unit, N extends ArgCount = 1> extends AnyIPFunction {
     tex_?: string;
-    name: string;
     readonly returnType: TYPE;
     readonly unit: U;
     nargs: N;
+    readonly timestep?: number;
+    readonly name?: string;
 
     f: IPCompiled<R, U, N>;
 
@@ -266,17 +254,17 @@ export interface IPFunctionBase<R extends BaseValue = BaseValue, U extends Unit 
 
     /**
      * Compute the LaTeX representation of this function.
-     * @param varName? The parameter name (or expression)
-     * @param ctx?
+     * @param varName?? The parameter name (or expression)
+     * @param ctx??
      */
-    toTex(varName?: string, ctx?: StyleContext): string;
+    toTex(varName?: Variable, ctx?: StyleContext): string;
 
     /**
      * Compute the LaTeX representation of this function including units.
-     * @param varName? The parameter name (or expression)
-     * @param ctx?
+     * @param varName?? The parameter name (or expression)
+     * @param ctx??
      */
-    toTexWithUnits(varName?: string, ctx?: StyleContext): string;
+    toTexWithUnits(varName?: Variable, ctx?: StyleContext): string;
 
     /**
      * Get the LaTeX representation of this function.  The value is cached.
@@ -286,25 +274,31 @@ export interface IPFunctionBase<R extends BaseValue = BaseValue, U extends Unit 
 
     /**
      * Produce HTML from the LaTeX representation. Produces a new HTML element on each call
-     * @param varName? Defaults to 't', the name of the variable used in generating LaTeX.
-     * @param block?
-     * @param ctx?
+     * @param varName?? Defaults to 't', the name of the variable used in generating LaTeX.
+     * @param block??
+     * @param ctx??
      */
-    toHtml(varName?: string, block?: boolean, ctx?: StyleContext): ViewOf<PFunction<R>> & Element;
+    toHtml(varName?: Variable, block?: boolean, ctx?: StyleContext): ViewOf<IPFunctionBase<R, U, N>> & Element;
 
     /**
      * Produce HTML from the LaTeX representation. Produces a new HTML element on each call
      * @param block
      */
-    readonly html: ViewOf<PFunction<R>> & Element;
+    readonly html: ViewOf<IPFunctionBase<R, U, N>> & Element;
 
     /**
-     *
-     * Set a name of the function
-     * @param name
-     * @private
+     * Determine if two functions are known to be equivalent. If so, returns the preferred one, otherwise null
+     * @param f
      */
-    setName_(name: string): this;
+    equiv<T>(f: T): null | this | T;
+
+    /**
+     * Return the simplest form of this function we are capable of. The notion of "simplest" is variable,
+     * such as whether to prefer factored forms or distribute the multiplications. These behaviors can be altered
+     * via the *options* argument.
+     * @param options
+     */
+    simplify(options?: any): IPFunctionBase<R, U, N>;
 }
 
 export interface IPFunctionCalculus<
@@ -317,7 +311,6 @@ export interface IPFunctionCalculus<
     extends IPFunctionBase<R, U, N>,
         IPCalculus<R, U, D, I>
 {
-
 }
 
 export type IPFunction<
@@ -326,7 +319,7 @@ export type IPFunction<
     N extends ArgCount = 1,
     D extends Unit = Divide<U, Units.time>,
     I extends Unit = Multiply<U, Units.time>
-    > = N extends 1
+    > = N extends 1|0
     ? R extends number
         ? IPFunctionCalculus<number, U, N, D, I>
         : R extends Rotation
@@ -350,7 +343,6 @@ export interface IPDifferentiable<
     D extends Unit
     >
 {
-    timestep: number;
     /**
      * Returns the derivative of this IPFunction
      */
@@ -366,7 +358,7 @@ export interface IPIntegrable<
     I extends Unit
     >
 {
-    timestep: number;
+    // timestep: number;
     /**
      * Returns the integral of this IPFunction.
      */
@@ -412,3 +404,5 @@ export interface DefiniteIntegral<
     readonly evaluating: IndefiniteIntegral<R, U, D, I>;
     readonly from: number;
 }
+
+export type Variable = string;

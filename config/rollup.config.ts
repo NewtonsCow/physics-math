@@ -38,6 +38,11 @@ const serve_mode = process.env.SERVE && dev;
 const serve_doc = process.env.SERVE_DOC && serve_mode;
 
 /**
+ * Avoid non-support of ?. optional chaining.
+ */
+const DISABLE_TERSER = true;
+
+/**
  * A rough description of the contents of [[package.json]].
  */
 interface Package {
@@ -61,7 +66,10 @@ export const outputs = (p: Package) => flatMap((e: OutputOptions) => (e.file ? [
             name: 'PM',
             sourcemap: true,
             globals: {
-                "ramda": "ramda",
+                katex: "katex",
+                d3: "d3",
+                "@observablehq/stdlib": "observablehq"
+                // "ramda": "ramda",
                 // "gl-matrix": "glMatrix"
             }
         },
@@ -103,8 +111,8 @@ const dbg: any = {name: 'dbg'};
  * @param from
  * @param resolved
  */
-const checkExternal = (id: string, from: string, resolved: boolean) =>
-    (resolved
+const checkExternal = (id: string, from?: string, resolved?: boolean): boolean =>
+    !/gl-matrix|glMatrix|genutils/i.test(id) && (resolved
         ? /node_modules/.test(id)
         : !/^\./.test(id));
 
@@ -113,15 +121,13 @@ const options: RollupOptions = {
     output: outputs(pkg),
     external: checkExternal,
     plugins: [
-        // dbg,
         resolve({
             // Check for these in package.json
             mainFields: mainFields(pkg, ['module', 'main', 'browser'])
         }),
         typescript({
              tsconfig: 'src/tsconfig.json',
-             include: "src/*.ts",
-             objectHashIgnoreUnknownHack: true,
+             include: "*.ts",
              verbosity: 1,
              cacheRoot: "./build/rts2-cache",
              // false = Put the declaration files into the regular output in lib/
@@ -131,10 +137,11 @@ const options: RollupOptions = {
             extensions: [".js", ".ts"]
         }),
         externalGlobals({
-            'gl-matrix': "glMatrix",
-            'katex': 'katex'
+            // 'gl-matrix': "glMatrix",
+            //'katex': 'katex',
+            'ramda': 'ramda'
         }),
-        ...!dev ? [
+        ...(!dev && !DISABLE_TERSER) ? [
             terser({
             module: true
         })
