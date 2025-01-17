@@ -59,7 +59,7 @@
     "d3": "^7.1.1",
     "genutils": "^1.0.6",
     "gl-matrix": "^3.4.3",
-    "katex": "^0.15.1"
+    "katex": "^0.16.21"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^21.0.1",
